@@ -65,5 +65,25 @@ namespace VentionTask.Controllers
             }
         }
 
+        [HttpGet]
+        public IActionResult GetUsersAscending(int limit = 10)
+        {
+            try
+            {
+                if (limit <= 0)
+                {
+                    return BadRequest("Limit must be a positive integer.");
+                }
+
+                var users = _context.Users.OrderBy(u => u.UserName).Take(limit).ToList();
+
+                return Ok(users);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, ex.Message);
+            }
+        }
+
     }
 }
