@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using VentionTask.Data;
+using VentionTask.Interfaces;
 
 namespace VentionTask.Controllers
 {
@@ -12,11 +13,13 @@ namespace VentionTask.Controllers
     [ApiController]
     public class UsersController : ControllerBase
     {
-        private readonly DataContext _context;
+        private readonly ICsvReaderService _csvReader;
+        private readonly IUserRepository _userRepository;
 
-        public UsersController(DataContext context)
+        public UsersController(ICsvReaderService csvReader, IUserRepository userRepository)
         {
-            _context = context;
+            _csvReader = csvReader;
+            _userRepository = userRepository;
         }
 
         [HttpPost("upload")]
@@ -27,63 +30,29 @@ namespace VentionTask.Controllers
 
             try
             {
-                var configuration = new CsvConfiguration(CultureInfo.InvariantCulture)
-                {
-                    HasHeaderRecord = false,
-                    TrimOptions = TrimOptions.Trim
-                };
-
-                using (var reader = new StreamReader(file.OpenReadStream()))
-                using (var csv = new CsvReader(reader, configuration))
-                {
-                    var users = csv.GetRecords<User>().ToList();
-                    foreach (var user in users)
-                    {
-                        var existingUser = await _context.Users
-                            .FirstOrDefaultAsync(u => u.UserName == user.UserName && u.UserIdentifier == user.UserIdentifier);
-
-                        if (existingUser == null)
-                            _context.Users.Add(user);
-                        else
-                        {
-                            existingUser.UserName = user.UserName;
-                            existingUser.Age = user.Age;
-                            existingUser.City = user.City;
-                            existingUser.PhoneNumber = user.PhoneNumber;
-                            existingUser.Email = user.Email;
-                        }
-                    }
-
-                    await _context.SaveChangesAsync();
-                }
-
+                var users = _csvReader.ReadCsv(file);
+                await _userRepository.AddOrUpdateUsersAsync(users);
                 return Ok("Users uploaded successfully");
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, ex.Message);
+                return BadRequest(ex.Message);
             }
         }
 
         [HttpGet]
-        public IActionResult GetUsersAscending(int limit = 10)
+        public async Task<IActionResult> GetUsersAscending(int limit = 10)
         {
             try
             {
-                if (limit <= 0)
-                {
-                    return BadRequest("Limit must be a positive integer.");
-                }
-
-                var users = _context.Users.OrderBy(u => u.UserName).Take(limit).ToList();
+                var users = await _userRepository.GetUsersAscending(limit);
 
                 return Ok(users);
             }
             catch (Exception ex)
             {
-                return StatusCode(StatusCodes.Status500InternalServerError, ex.Message);
+                return BadRequest(ex.Message);
             }
         }
-
     }
 }
